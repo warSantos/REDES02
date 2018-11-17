@@ -14,13 +14,22 @@
 
 #define PORT 40000
 #define QTDE_CONEXOES 10
-#define HEADER_SIZE 8192
+#define HEADER_SIZE 2048
+
+// ESTRUTURAS PTHREAD
+pthread_t threads[10];
+u_int32_t threads_rodando;
 
 typedef struct {
 
     int bytes_lidos;
     char cabecalho[HEADER_SIZE];
 } Requisicao;
+
+
+typedef struct{
+    char *buffer_resposta;
+} Resposta;
 
 Requisicao *ler_cabecalho (int socket_cliente);
 
