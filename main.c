@@ -2,6 +2,6 @@
 
 int main (){
 
-    servidor_sequencial ();
+    servidor_produtor_consumidor();
     return 0;
 }

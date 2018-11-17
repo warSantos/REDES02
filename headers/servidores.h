@@ -13,12 +13,17 @@
 #include <unistd.h>
 
 #define PORT 40000
-#define QTDE_CONEXOES 10
+#define QTDE_CONEXOES 3
 #define HEADER_SIZE 2048
 
 // ESTRUTURAS PTHREAD
-pthread_t threads[10];
+pthread_t threads[QTDE_CONEXOES];
 u_int32_t threads_rodando;
+pthread_mutex_t threads_rodando_protect;
+pthread_mutex_t fila_requisicoes_protect[QTDE_CONEXOES];
+
+// Modelo cliente servidor.
+u_int32_t fila_requisicoes[QTDE_CONEXOES];
 
 typedef struct {
 
@@ -34,5 +39,13 @@ typedef struct{
 Requisicao *ler_cabecalho (int socket_cliente);
 
 void servidor_sequencial ();
+
+void responde_cliente_paralelo (void *args);
+
+void servidor_paralelo ();
+
+void servidor_produtor_consumidor ();
+
+void consumidor ();
 
 #endif
