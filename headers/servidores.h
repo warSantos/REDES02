@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#include <sys/time.h>
 #include <stdint.h>
 #include<sys/socket.h>
 #include<arpa/inet.h> //inet_addr
@@ -47,5 +47,7 @@ void servidor_paralelo ();
 void servidor_produtor_consumidor ();
 
 void consumidor ();
+
+void servidor_select ();
 
 #endif

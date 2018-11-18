@@ -53,7 +53,7 @@ void servidor_sequencial (){
     socket_escuta = socket(AF_INET, SOCK_STREAM, 0);
 
     if (socket_escuta == -1){
-        perror("Erro");
+        perror("erro");
         exit (1);
     }
 
@@ -66,12 +66,15 @@ void servidor_sequencial (){
     // Criando link entre a estrutura servidor ao ID do socket.
     if(bind(socket_escuta, (struct sockaddr *) &servidor, sizeof(servidor)) < 0){        
         close(socket_escuta);
-        perror("Erro");
+        perror("bind");
         exit(1);
     }
 
     // Limitando o número de conexões a uma conexão por vez.
-    listen(socket_escuta, 1);
+    if (listen(socket_escuta, 1) < 0){
+        perror ("listen");
+        exit(1);
+    }
     
     // Mantenha o servidor ativo.
     while (1){
@@ -91,7 +94,7 @@ void responde_cliente_paralelo (void *args){
     pthread_mutex_lock (&threads_rodando_protect);
     threads_rodando++;
     pthread_mutex_unlock (&threads_rodando_protect);
-
+    printf ("Respondendo cliente.\n");
     int socket_cliente = *(int *)args;
     // Recebendo cabeçalho do cliente de requisicao.
     //Requisicao *req = ler_cabecalho (socket_cliente);
@@ -101,7 +104,7 @@ void responde_cliente_paralelo (void *args){
     char str[2031];
     FILE *leitor = fopen ("www/index.html", "r");
     if (leitor == NULL){
-        perror ("Erro");
+        perror ("erro");
     }
     //Configurando o protocolo.
     sprintf (res->buffer_resposta, "HTTP/1.0 200 OK\n\n");
@@ -121,10 +124,10 @@ void responde_cliente_paralelo (void *args){
     pthread_mutex_unlock (&threads_rodando_protect);
 
     // Liberando estruturas da conexão.
-    close (socket_cliente);
     fclose (leitor);
     free(res->buffer_resposta);
     free(res);
+    close (socket_cliente);
 }
 
 void servidor_paralelo (){
@@ -138,7 +141,7 @@ void servidor_paralelo (){
     // Abrindo socket para ouvir solicitações de conexão.
 
     if (socket_escuta == -1){
-        perror("Erro");
+        perror("socket");
         exit (1);
     }
 
@@ -151,12 +154,15 @@ void servidor_paralelo (){
     // Criando link entre a estrutura servidor ao ID do socket.
     if(bind(socket_escuta, (struct sockaddr *) &servidor, sizeof(servidor)) < 0){        
         close(socket_escuta);
-        perror("Erro");
+        perror("bind");
         exit(1);
     }
 
     // Limitando o número de conexões.
-    listen(socket_escuta, QTDE_CONEXOES);
+    if (listen(socket_escuta, QTDE_CONEXOES) < 0){
+        perror ("listen");
+        exit(1);
+    }
     
     // Estruturas de thread.
     threads_rodando = 0;
@@ -166,7 +172,7 @@ void servidor_paralelo (){
         socket_cliente = accept(socket_escuta, (struct sockaddr *) &cliente, (socklen_t *) &sizeSockaddr);
         if (pthread_create (&threads[threads_rodando],
             NULL, (void *)&responde_cliente_paralelo, (void *)&socket_cliente) < 0){
-                perror("Create Thread Error");
+                perror("create thread error");
             exit(1);
         }
         if (threads_rodando == QTDE_CONEXOES){
@@ -174,7 +180,7 @@ void servidor_paralelo (){
         }
     }
     // Encerrando socket de escuta do cliente.
-    close (socket_escuta);
+    //close (socket_escuta);
 }
 
 void servidor_produtor_consumidor (){
@@ -186,7 +192,7 @@ void servidor_produtor_consumidor (){
     // Abrindo socket para ouvir solicitações de conexão.
 
     if (socket_escuta == -1){
-        perror("Erro");
+        perror("socket");
         exit (1);
     }
 
@@ -199,12 +205,15 @@ void servidor_produtor_consumidor (){
     // Criando link entre a estrutura servidor ao ID do socket.
     if(bind(socket_escuta, (struct sockaddr *) &servidor, sizeof(servidor)) < 0){        
         close(socket_escuta);
-        perror("Erro");
+        perror("bind");
         exit(1);
     }
 
     // Limitando o número de conexões.
-    listen(socket_escuta, QTDE_CONEXOES);
+    if (listen(socket_escuta, QTDE_CONEXOES) < 0){
+        perror ("listen");
+        exit(1);
+    }
     
     // Iniciando a fila de clientes.
     int i;
@@ -218,7 +227,7 @@ void servidor_produtor_consumidor (){
     for (i = 0; i < QTDE_CONEXOES; i++){
         if (pthread_create (&threads[threads_rodando],
             NULL, (void *)&consumidor, (void *)&socket_cliente) < 0){
-                perror("Create Thread Error");
+                perror("create thread error");
             exit(1);
         }
         pthread_mutex_init (&fila_requisicoes_protect[i], NULL);
@@ -257,5 +266,77 @@ void consumidor (){
             }
         }// Se não conseguiu nenhuma requisição para antender durma por 0.2 ms.
         sleep (0.2);
+    }
+}
+
+void servidor_select (){
+
+    int socket_escuta, socket_cliente;
+    int max_socket, i, atividade;
+    int size_sockaddr = sizeof (struct sockaddr_in);
+    struct sockaddr_in servidor, cliente;
+    fd_set read_fds, master;
+    FD_ZERO (&master);
+    FD_ZERO (&read_fds);
+
+    socket_escuta = socket(AF_INET, SOCK_STREAM, 0);
+    // Abrindo socket para ouvir solicitações de conexão.
+    if (socket_escuta == -1){
+        perror("socket");
+        exit (1);
+    }
+    // Configurando a estrutura do servidor.
+    servidor.sin_family = AF_INET; // Atribuindo a familia de protocolos para Internet.
+    servidor.sin_addr.s_addr = htonl(INADDR_ANY); // Recebendo conexões de qualquer endereço.
+    servidor.sin_port = htons(PORT); // Setando e porta em que rodara o processo.
+    memset(servidor.sin_zero, 0, sizeof servidor.sin_zero);
+
+    // Criando link entre a estrutura servidor ao ID do socket.
+    if(bind(socket_escuta, (struct sockaddr *) &servidor, sizeof(servidor)) < 0){        
+        close(socket_escuta);
+        perror("bind");
+        exit(1);
+    }
+
+    // Limitando o número de conexões.
+    if (listen(socket_escuta, QTDE_CONEXOES) < 0){
+        perror ("listen");
+        exit(1);
+    }
+    // Adicionando o socket_escuta ao set master.
+    FD_SET(socket_escuta, &master);
+    // Atualizando o valor máximo do conjunto de scokets como o socket do accept.
+    max_socket = socket_escuta;
+    // Enquanto o servidor estiver ativo.
+    while (1){
+        read_fds = master;
+        // Esperando por algum novo cliente.
+        atividade = select (max_socket + 1, &read_fds, NULL, NULL, NULL);
+        if (atividade < 0){
+            perror ("select");
+            exit(1);
+        }
+        for (i = 0; i <= max_socket; ++i){
+            // Se algum dado foi escrito no socket i.
+            if (FD_ISSET (i, &read_fds)){
+                // Se i for o socket de escuta para receber novos clientes.
+                if (i == socket_escuta){
+                    socket_cliente = accept (socket_escuta, 
+                        (struct sockaddr *)&cliente, (socklen_t *)&size_sockaddr);
+                    if (socket_cliente == -1){
+                        perror ("accept");
+                        exit (1);
+                    }else{ // Se a conexão for aceita sem erros.
+                        FD_SET (socket_cliente, &master);
+                        if (socket_cliente > max_socket){
+                            max_socket = socket_cliente;
+                        }
+                    }
+                }else { // Se for o cabeçalho do cliente de algum cliente.
+                    responde_cliente_paralelo ((void *)&i);
+                    FD_CLR (i, &master);
+                }
+            }
+        }
     }
 }
