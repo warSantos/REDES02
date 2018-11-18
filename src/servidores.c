@@ -5,7 +5,7 @@ Requisicao *ler_cabecalho (int socket_cliente){
     Requisicao *req = malloc (sizeof(Requisicao));
     req->bytes_lidos = 0;
     req->bytes_lidos = read (socket_cliente, req->cabecalho, HEADER_SIZE);
-    printf ("%s.\n", req->cabecalho);    
+    printf ("%s.\n", req->cabecalho);
     return req;
 }
 
@@ -52,7 +52,8 @@ int criar_socket_escuta (int qtde_con){
 void responde_cliente (int socket_cliente){
 
     // Recebendo cabeçalho do cliente de requisicao.
-    //Requisicao *req = ler_cabecalho (socket_cliente);
+    Requisicao *req = ler_cabecalho (socket_cliente);
+    printf ("Cabeçalho: \n%s", req->cabecalho);
     // Declarando estruturas.
     Resposta *res = malloc (sizeof (Resposta));
     res->buffer_resposta = malloc (2048);
@@ -62,16 +63,16 @@ void responde_cliente (int socket_cliente){
         perror ("Erro");
     }
     //Configurando o protocolo.
-    sprintf (res->buffer_resposta, "HTTP/1.0 200 OK\n\n");
+    sprintf (res->buffer_resposta, "HTTP/1.0 200 OK\r\n\r\n");
 
     // Lendo o arquivo solicitado.
     fseek (leitor, 0, SEEK_END);
     u_int32_t tamanho_arquivo = ftell(leitor);
     rewind (leitor);
     fread (str, 1, tamanho_arquivo, leitor);
-    sprintf (res->buffer_resposta+17, "%s", str);
+    sprintf (res->buffer_resposta+19, "%s", str);
     // Escrevendo resposta para o cliente.
-    write (socket_cliente, res->buffer_resposta, strlen(str) + 17);
+    write (socket_cliente, res->buffer_resposta, strlen(str) + 19);
     // Liberando estruturas da conexão.
     close (socket_cliente);
     fclose (leitor);

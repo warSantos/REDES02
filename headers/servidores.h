@@ -13,7 +13,8 @@
 #include <unistd.h>
 
 #define PORT 40000
-#define QTDE_CONEXOES 3
+#define QTDE_CONEXOES 5
+#define BUFFER_SIZE 256
 #define HEADER_SIZE 2048
 
 // ESTRUTURAS PTHREAD
@@ -23,7 +24,7 @@ pthread_mutex_t threads_rodando_protect;
 pthread_mutex_t fila_requisicoes_protect[QTDE_CONEXOES];
 
 // Modelo cliente servidor.
-u_int32_t fila_requisicoes[QTDE_CONEXOES];
+u_int32_t fila_requisicoes[BUFFER_SIZE];
 
 typedef struct {
 
