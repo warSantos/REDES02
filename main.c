@@ -2,6 +2,10 @@
 
 int main (){
 
-    servidor_select();
+    //servidor_sequencial ();
+    //servidor_paralelo (); 
+    servidor_produtor_consumidor();
+    //servidor_select ();
+    
     return 0;
 }
