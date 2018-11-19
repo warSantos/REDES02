@@ -29,7 +29,6 @@ pthread_mutex_t fila_requisicoes_protect[QTDE_CONEXOES];
 u_int32_t fila_requisicoes[BUFFER_SIZE];
 
 typedef struct {
-
     int bytes_lidos;
     char cabecalho[HEADER_SIZE];
 } Requisicao;
@@ -37,6 +36,7 @@ typedef struct {
 
 typedef struct{
     u_int32_t tamanho_mensagem;
+    u_int8_t status;
     char *buffer_resposta;
 } Resposta;
 

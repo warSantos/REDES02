@@ -50,9 +50,19 @@ Resposta *carregar_arquivo (char *url){
     FILE *leitor = fopen (url, "r");
     // Se o arquivo não for encontrado.
     if (leitor == NULL){
-        perror ("Erro");
-        arquivo->tamanho_mensagem = -1;
-        return NULL;
+        perror ("Not found");
+        arquivo->status = -1;
+        // Lendo o arquivo 404.
+        leitor = fopen ("www/not_found.html", "r");
+        fseek (leitor, 0, SEEK_END);
+        // Recebendo o tamanho do arquivo 404.
+        arquivo->tamanho_mensagem = ftell(leitor);
+        arquivo->buffer_resposta = malloc (arquivo->tamanho_mensagem);
+        rewind (leitor);
+        // Carregando o arquivo 404 para memória.
+        fread (arquivo->buffer_resposta, 1, arquivo->tamanho_mensagem, leitor);
+        fclose (leitor);
+        return arquivo;
     }
     // Lendo o arquivo solicitado.
     fseek (leitor, 0, SEEK_END);
@@ -61,14 +71,27 @@ Resposta *carregar_arquivo (char *url){
     arquivo->buffer_resposta = malloc (arquivo->tamanho_mensagem);
     // Se não existir memória suficiente para o arquivo.
     if (arquivo->buffer_resposta == NULL){
-        perror ("malloc");
-        arquivo->tamanho_mensagem = -2;
-        return NULL;
+        perror ("Payload");
+        arquivo->status = -2;
+        // Fechando o file descriptor.
+        fclose (leitor);
+        // Lendo o arquivo 413.
+        leitor = fopen ("www/payload.html", "r");
+        fseek (leitor, 0, SEEK_END);
+        // Recebendo o tamanho do arquivo 413.
+        arquivo->tamanho_mensagem = ftell(leitor);
+        arquivo->buffer_resposta = malloc (arquivo->tamanho_mensagem);
+        rewind (leitor);
+        // Carregando o arquivo 413 para memória.
+        fread (arquivo->buffer_resposta, 1, arquivo->tamanho_mensagem, leitor);
+        fclose (leitor);
+        return arquivo;
     }
     rewind (leitor);
     // Carregando o arquivo.
     fread (arquivo->buffer_resposta, 1, arquivo->tamanho_mensagem, leitor);
     fclose (leitor);
+    arquivo->status = 0;
     return arquivo;
 }
 
@@ -77,19 +100,19 @@ Resposta *parser_http_header (Requisicao *req){
     // Estrutura para receber o arquivo.
     Resposta *arquivo, *res = malloc (sizeof(Resposta));
     // Definindo estruturas da mensagem.
-    char *not_found = "HTTP/1.0 404 Not Found";
-    char *payload = "HTTP/1.0 413 Payload Too Large";
     char url[URL_SIZE] = {0};
     char header[100] = {0};
     int i, j = 0;
     int header_size;
     // Copiando url do cabeçalho.
+    printf ("Cabeçalhos:\n%s.\n", req->cabecalho);
     for (i = 0; req->cabecalho[i] != ' '; i++);
     i++;
     for (; req->cabecalho[i] != ' '; i++){
         if (j > 0 || req->cabecalho[i] != '/'){
             url[j] = req->cabecalho[i];
             j++;
+            printf ("i: %d j: %d.\n", i , j);
         }
     }
     /* Tentando abrir o arquivo. */
@@ -97,25 +120,27 @@ Resposta *parser_http_header (Requisicao *req){
     if ((url[0] == '/' && url[1] == 0) || url[0] == 0){
         arquivo = carregar_arquivo ("www/index.html");
     }else{
-        printf ("URL: %s.\n", url);
+        printf ("Antes URL: %s\n", url);
+        // Se a url não tiver o prefixo www/.
+        printf ("Depois URL: %s\n", url);
         arquivo = carregar_arquivo (url);
     }    
     // Se o arquivo não foi encontrado: 404.
-    if (arquivo->tamanho_mensagem == -1){ 
-
-    }// Se não foi possível alcoar memória para o arquivo: 413.
-    else if (arquivo->tamanho_mensagem == -2){
+    if (arquivo->status == -1){ 
+        sprintf (header, "HTTP/1.0 404 Not Found\nContent-Lenght: %d\r\n\r\n", arquivo->tamanho_mensagem);
         
+    }// Se não foi possível alcoar memória para o arquivo: 413.
+    else if (arquivo->status == -2){
+        sprintf (header, "HTTP/1.0 413 Payload Too Large\nContent-Lenght: %d\r\n\r\n", arquivo->tamanho_mensagem);
     }// Se foi possível carregar o arquivo.
     else {
         sprintf (header, "HTTP/1.0 200 OK\nContent-Lenght: %d\r\n\r\n", arquivo->tamanho_mensagem);
-        header_size = strlen (header);
-        res->buffer_resposta = malloc (arquivo->tamanho_mensagem + header_size);
-        memcpy (res->buffer_resposta, header, header_size);
-        memcpy (res->buffer_resposta + header_size, arquivo->buffer_resposta, arquivo->tamanho_mensagem);
-        printf ("Pacote: \n%s.\n", res->buffer_resposta);
-        res->tamanho_mensagem = header_size + arquivo->tamanho_mensagem;
     }
+    header_size = strlen (header);
+    res->buffer_resposta = malloc (arquivo->tamanho_mensagem + header_size);
+    memcpy (res->buffer_resposta, header, header_size);
+    memcpy (res->buffer_resposta + header_size, arquivo->buffer_resposta, arquivo->tamanho_mensagem);
+    res->tamanho_mensagem = header_size + arquivo->tamanho_mensagem;
     free (arquivo);
     return res;
 }
@@ -124,7 +149,6 @@ void responde_cliente (int socket_cliente){
 
     // Recebendo cabeçalho do cliente de requisicao.
     Requisicao *req = ler_cabecalho (socket_cliente);
-    printf ("Requisição: \n%s", req->cabecalho);
     // Declarando estruturas.
     Resposta *res = parser_http_header (req);
     write (socket_cliente, res->buffer_resposta, res->tamanho_mensagem);
@@ -133,6 +157,13 @@ void responde_cliente (int socket_cliente){
     free (req);
     free (res->buffer_resposta);
     free (res);
+}
+
+void responde_cliente_paralelo (void *args){
+
+    int socket_cliente = *(int *)args;
+    responde_cliente (socket_cliente);
+    free (args);
 }
 
 void servidor_sequencial (){
@@ -149,49 +180,6 @@ void servidor_sequencial (){
     }
     // Encerrando socket de escuta do cliente.
     close (socket_escuta);
-}
-
-void responde_cliente_paralelo (void *args){
-    
-    // Aumentando o número de threads.
-    pthread_mutex_lock (&threads_rodando_protect);
-    threads_rodando++;
-    pthread_mutex_unlock (&threads_rodando_protect);
-    printf ("Respondendo cliente.\n");
-    int socket_cliente = *(int *)args;
-    // Recebendo cabeçalho do cliente de requisicao.
-    //Requisicao *req = ler_cabecalho (socket_cliente);
-    // Declarando estruturas.
-    Resposta *res = malloc (sizeof (Resposta));
-    res->buffer_resposta = malloc (2048);
-    char str[2031];
-    FILE *leitor = fopen ("www/index.html", "r");
-    if (leitor == NULL){
-        perror ("erro");
-    }
-    //Configurando o protocolo.
-    sprintf (res->buffer_resposta, "HTTP/1.0 200 OK\r\n\r\n");
-
-    // Lendo o arquivo solicitado.
-    fseek (leitor, 0, SEEK_END);
-    u_int32_t tamanho_arquivo = ftell(leitor);
-    rewind (leitor);
-    fread (str, 1, tamanho_arquivo, leitor);
-    sprintf (res->buffer_resposta + 19, "%s", str);
-    // Escrevendo resposta para o cliente.
-    write (socket_cliente, res->buffer_resposta, strlen(str) + 19);
-    
-    // Diminuindo o número de threads.
-    pthread_mutex_lock (&threads_rodando_protect);
-    threads_rodando--;
-    pthread_mutex_unlock (&threads_rodando_protect);
-
-    // Liberando estruturas da conexão.
-    fclose (leitor);
-    free(res->buffer_resposta);
-    free(res);
-    close (socket_cliente);
-    free (args);
 }
 
 void servidor_paralelo (){
