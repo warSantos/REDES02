@@ -42,18 +42,26 @@ typedef struct{
     char *buffer_resposta;
 } Resposta;
 
+int criar_socket_escuta (int qtde_con);
+
 Requisicao *ler_cabecalho (int socket_cliente);
 
-void servidor_sequencial ();
+Resposta *carregar_arquivo (char *url);
 
-void responde_cliente_paralelo (void *args);
+Resposta *parser_http_header (Requisicao *req);
 
-void servidor_paralelo ();
+void servidor_sequencial (void);
 
-void servidor_produtor_consumidor ();
+void responde_cliente (int socket_cliente);
 
-void consumidor ();
+void responde_cliente_thread (void *args);
 
-void servidor_select ();
+void servidor_paralelo (void);
+
+void servidor_produtor_consumidor (void);
+
+void consumidor (void);
+
+void servidor_select (void);
 
 #endif

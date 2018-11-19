@@ -4,7 +4,6 @@ int criar_socket_escuta (int qtde_con){
     
     int socket_escuta, yes = 1;
     struct sockaddr_in servidor;
-
     // Abrindo socket para ouvir solicitações de conexão.
     socket_escuta = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_escuta == -1){
@@ -118,15 +117,12 @@ Resposta *parser_http_header (Requisicao *req){
     stat (url, &fd);
     S_ISDIR(fd.st_mode)
     */
-    printf ("URL: %s\n'''''''''''''''''''''\n", url);
     DIR *d = opendir(url);
     // Se o arquivo solicitado for o index ou um diretório/arquivo não regular.
     if ((url[0] == '/' && url[1] == 0) || url[0] == 0 || d != NULL){
         closedir (d);
-        printf ("Retorna a barra.\n");
         arquivo = carregar_arquivo ("www/index.html");
     }else{
-        printf ("Retorna arquivo.\n");
         // Se a url não tiver o prefixo www/.
         if(strncmp ("www/", url, 4)){
             char temp[URL_SIZE] = {0};
@@ -152,6 +148,7 @@ Resposta *parser_http_header (Requisicao *req){
     memcpy (res->buffer_resposta, header, header_size);
     memcpy (res->buffer_resposta + header_size, arquivo->buffer_resposta, arquivo->tamanho_mensagem);
     res->tamanho_mensagem = header_size + arquivo->tamanho_mensagem;
+    free (arquivo->buffer_resposta);
     free (arquivo);
     return res;
 }
@@ -170,14 +167,14 @@ void responde_cliente (int socket_cliente){
     free (res);
 }
 
-void responde_cliente_paralelo (void *args){
+void responde_cliente_thread (void *args){
 
     int socket_cliente = *(int *)args;
     responde_cliente (socket_cliente);
     free (args);
 }
 
-void servidor_sequencial (){
+void servidor_sequencial (void){
 
     int socket_escuta, socket_cliente, sizeSockaddr = sizeof(struct sockaddr_in);
     struct sockaddr_in cliente;
@@ -193,7 +190,7 @@ void servidor_sequencial (){
     close (socket_escuta);
 }
 
-void servidor_paralelo (){
+void servidor_paralelo (void){
     
     pthread_mutex_init (&threads_rodando_protect, NULL);
 
@@ -209,7 +206,7 @@ void servidor_paralelo (){
         socket_cliente = malloc (sizeof(int));
         socket_cliente[0] = accept(socket_escuta, (struct sockaddr *) &cliente, (socklen_t *) &sizeSockaddr);
         if (pthread_create (&threads[threads_rodando],
-            NULL, (void *)&responde_cliente_paralelo, (void *)&socket_cliente[0]) < 0){
+            NULL, (void *)&responde_cliente_thread, (void *)&socket_cliente[0]) < 0){
                 perror("create thread error");
             exit(1);
         }
@@ -221,7 +218,7 @@ void servidor_paralelo (){
     close (socket_escuta);
 }
 
-void servidor_produtor_consumidor (){
+void servidor_produtor_consumidor (void){
 
     int socket_escuta, socket_cliente;
     int sizeSockaddr = sizeof(struct sockaddr_in);
@@ -273,7 +270,7 @@ void servidor_produtor_consumidor (){
     close (socket_escuta);
 }
 
-void consumidor (){
+void consumidor (void){
     int i;
     // Enquanto o servidor estiver ativo.
     while (1){
@@ -292,7 +289,7 @@ void consumidor (){
     }
 }
 
-void servidor_select (){
+void servidor_select (void){
 
     int socket_escuta, socket_cliente;
     int max_socket, i, atividade;
