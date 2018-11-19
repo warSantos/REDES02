@@ -5,13 +5,102 @@ Requisicao *ler_cabecalho (int socket_cliente){
     Requisicao *req = malloc (sizeof(Requisicao));
     req->bytes_lidos = 0;
     req->bytes_lidos = read (socket_cliente, req->cabecalho, HEADER_SIZE);
-    printf ("%s.\n", req->cabecalho);
     return req;
 }
 
-void parser_http_header (Requisicao *req){
+Resposta *carregar_arquivo (char *url){
 
+    // Estrutura para receber o arquivo.
+    Resposta *arquivo = malloc (sizeof (Resposta));
+    FILE *leitor = fopen (url, "r");
+    // Se o arquivo não for encontrado.
+    if (leitor == NULL){
+        perror ("Erro");
+        arquivo->tamanho_mensagem = -1;
+        return NULL;
+    }
+    // Lendo o arquivo solicitado.
+    fseek (leitor, 0, SEEK_END);
+    // Recebendo o tamanho do arquivo.
+    arquivo->tamanho_mensagem = ftell(leitor);
+    arquivo->buffer_resposta = malloc (arquivo->tamanho_mensagem);
+    // Se não existir memória suficiente para o arquivo.
+    if (arquivo->buffer_resposta == NULL){
+        perror ("malloc");
+        arquivo->tamanho_mensagem = -2;
+        return NULL;
+    }
+    rewind (leitor);
+    // Carregando o arquivo.
+    fread (arquivo->buffer_resposta, 1, arquivo->tamanho_mensagem, leitor);
+    fclose (leitor);
+    return arquivo;
+}
 
+Resposta *parser_http_header (Requisicao *req){
+
+    // Estrutura para receber o arquivo.
+    Resposta *arquivo, *res = malloc (sizeof(Resposta));
+    // Definindo estruturas da mensagem.
+    char *found = "HTTP/1.0 200 OK\n";
+    char *not_found = "HTTP/1.0 404 Not Found";
+    char *payload = "HTTP/1.0 413 Payload Too Large";
+    char content[16];
+    memcpy (content, "Content-Lenght: ", strlen ("Content-Lenght: "));
+    char url[URL_SIZE] = {0};
+    char header[100] = {0};
+    int i, j = 0;
+    int header_size, found_size = strlen (found) + 1;
+    // Copiando url do cabeçalho.
+    for (i = 0; req->cabecalho[i] != ' '; i++);
+    i++;
+    for (; req->cabecalho[i] != ' '; i++){
+        if (j > 0 || req->cabecalho[i] != '/'){
+            url[j] = req->cabecalho[i];
+            j++;
+        }
+    }
+    /* Tentando abrir o arquivo. */
+    // Se o arquivo solicitado for o index.
+    if (url[0] == '/' && url[1] == 0 || url[0] == 0){
+        arquivo = carregar_arquivo ("www/index.html");
+    }else{
+        printf ("URL: %s.\n", url);
+        arquivo = carregar_arquivo (url);
+    }    
+    // Se o arquivo não foi encontrado: 404.
+    if (arquivo->tamanho_mensagem == -1){ 
+
+    }// Se não foi possível alcoar memória para o arquivo: 413.
+    else if (arquivo->tamanho_mensagem == -2){
+        
+    }// Se foi possível carregar o arquivo.
+    else {
+        sprintf (header, "%s%s%d\r\n\r\n", found, content, arquivo->tamanho_mensagem);
+        printf ("Cabeçalho Resposta:\n%s", header);
+        header_size =  found_size + strlen (header + found_size);
+        res->buffer_resposta = malloc (sizeof(arquivo->tamanho_mensagem + header_size));        
+        memcpy (res->buffer_resposta, header, header_size);
+        memcpy (res->buffer_resposta + header_size, arquivo->buffer_resposta, arquivo->tamanho_mensagem);
+        res->tamanho_mensagem = header_size + arquivo->tamanho_mensagem;
+    }
+    free (arquivo);
+    return res;
+}
+
+void responde_cliente (int socket_cliente){
+
+    // Recebendo cabeçalho do cliente de requisicao.
+    Requisicao *req = ler_cabecalho (socket_cliente);
+    printf ("Requisição: \n%s", req->cabecalho);
+    // Declarando estruturas.
+    Resposta *res = parser_http_header (req);
+    write (socket_cliente, res->buffer_resposta, res->tamanho_mensagem);
+    // Liberando estruturas da conexão.
+    close (socket_cliente);
+    free (req);
+    free (res->buffer_resposta);
+    free (res);
 }
 
 int criar_socket_escuta (int qtde_con){
@@ -47,37 +136,6 @@ int criar_socket_escuta (int qtde_con){
         exit(1);
     }
     return socket_escuta;
-}
-
-void responde_cliente (int socket_cliente){
-
-    // Recebendo cabeçalho do cliente de requisicao.
-    Requisicao *req = ler_cabecalho (socket_cliente);
-    printf ("Cabeçalho: \n%s", req->cabecalho);
-    // Declarando estruturas.
-    Resposta *res = malloc (sizeof (Resposta));
-    res->buffer_resposta = malloc (2048);
-    char str[2031];
-    FILE *leitor = fopen ("www/index.html", "r");
-    if (leitor == NULL){
-        perror ("Erro");
-    }
-    //Configurando o protocolo.
-    sprintf (res->buffer_resposta, "HTTP/1.0 200 OK\r\n\r\n");
-
-    // Lendo o arquivo solicitado.
-    fseek (leitor, 0, SEEK_END);
-    u_int32_t tamanho_arquivo = ftell(leitor);
-    rewind (leitor);
-    fread (str, 1, tamanho_arquivo, leitor);
-    sprintf (res->buffer_resposta+19, "%s", str);
-    // Escrevendo resposta para o cliente.
-    write (socket_cliente, res->buffer_resposta, strlen(str) + 19);
-    // Liberando estruturas da conexão.
-    close (socket_cliente);
-    fclose (leitor);
-    free(res->buffer_resposta);
-    free(res);
 }
 
 void servidor_sequencial (){

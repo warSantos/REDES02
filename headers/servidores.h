@@ -16,6 +16,8 @@
 #define QTDE_CONEXOES 5
 #define BUFFER_SIZE 256
 #define HEADER_SIZE 2048
+#define URL_SIZE 256
+#define ELDER 404
 
 // ESTRUTURAS PTHREAD
 pthread_t threads[QTDE_CONEXOES];
@@ -34,6 +36,7 @@ typedef struct {
 
 
 typedef struct{
+    u_int32_t tamanho_mensagem;
     char *buffer_resposta;
 } Resposta;
 
