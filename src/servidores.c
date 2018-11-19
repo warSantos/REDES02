@@ -105,26 +105,37 @@ Resposta *parser_http_header (Requisicao *req){
     int i, j = 0;
     int header_size;
     // Copiando url do cabeçalho.
-    printf ("Cabeçalhos:\n%s.\n", req->cabecalho);
     for (i = 0; req->cabecalho[i] != ' '; i++);
     i++;
     for (; req->cabecalho[i] != ' '; i++){
         if (j > 0 || req->cabecalho[i] != '/'){
             url[j] = req->cabecalho[i];
             j++;
-            printf ("i: %d j: %d.\n", i , j);
         }
     }
     /* Tentando abrir o arquivo. */
-    // Se o arquivo solicitado for o index.
-    if ((url[0] == '/' && url[1] == 0) || url[0] == 0){
+    /*struct stat fd;
+    stat (url, &fd);
+    S_ISDIR(fd.st_mode)
+    */
+    printf ("URL: %s\n'''''''''''''''''''''\n", url);
+    DIR *d = opendir(url);
+    // Se o arquivo solicitado for o index ou um diretório/arquivo não regular.
+    if ((url[0] == '/' && url[1] == 0) || url[0] == 0 || d != NULL){
+        closedir (d);
+        printf ("Retorna a barra.\n");
         arquivo = carregar_arquivo ("www/index.html");
     }else{
-        printf ("Antes URL: %s\n", url);
+        printf ("Retorna arquivo.\n");
         // Se a url não tiver o prefixo www/.
-        printf ("Depois URL: %s\n", url);
-        arquivo = carregar_arquivo (url);
-    }    
+        if(strncmp ("www/", url, 4)){
+            char temp[URL_SIZE] = {0};
+            sprintf (temp, "www/%s", url);
+            arquivo = carregar_arquivo (temp);
+        }else {
+            arquivo = carregar_arquivo (url);
+        }
+    }
     // Se o arquivo não foi encontrado: 404.
     if (arquivo->status == -1){ 
         sprintf (header, "HTTP/1.0 404 Not Found\nContent-Lenght: %d\r\n\r\n", arquivo->tamanho_mensagem);

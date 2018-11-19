@@ -6,11 +6,13 @@
 #include <string.h>
 #include <sys/time.h>
 #include <stdint.h>
-#include<sys/socket.h>
-#include<arpa/inet.h> //inet_addr
+#include <sys/socket.h>
+#include <arpa/inet.h> //inet_addr
 #include <netinet/in.h> //inet_addr
 #include <pthread.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <dirent.h>
 
 #define PORT 40000
 #define QTDE_CONEXOES 5
