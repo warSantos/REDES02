@@ -1,5 +1,40 @@
 #include "../headers/servidores.h"
 
+int criar_socket_escuta (int qtde_con){
+    
+    int socket_escuta, yes = 1;
+    struct sockaddr_in servidor;
+
+    // Abrindo socket para ouvir solicitações de conexão.
+    socket_escuta = socket(AF_INET, SOCK_STREAM, 0);
+    if (socket_escuta == -1){
+        perror("erro");
+        exit (1);
+    }
+    // Verificando se o socket ja esta em uso.
+    if (setsockopt (socket_escuta, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1){
+        perror ("setsocket");
+        exit (1);
+    }
+    // Configurando estrutura do servidor.
+    servidor.sin_family = AF_INET; // Atribuindo a familia de protocolos para Internet.
+    servidor.sin_addr.s_addr = htonl(INADDR_ANY); // Recebendo conexões de qualquer endereço.
+    servidor.sin_port = htons(PORT); // Setando e porta em que rodara o processo.
+    memset(servidor.sin_zero, 0, sizeof servidor.sin_zero);
+    // Criando link entre a estrutura servidor ao ID do socket.
+    if(bind(socket_escuta, (struct sockaddr *) &servidor, sizeof(servidor)) < 0){        
+        close(socket_escuta);
+        perror("bind");
+        exit(1);
+    }
+    // Limitando o número de conexões a uma conexão por vez.
+    if (listen(socket_escuta, qtde_con) < 0){
+        perror ("listen");
+        exit(1);
+    }
+    return socket_escuta;
+}
+
 Requisicao *ler_cabecalho (int socket_cliente){
 
     Requisicao *req = malloc (sizeof(Requisicao));
@@ -42,15 +77,12 @@ Resposta *parser_http_header (Requisicao *req){
     // Estrutura para receber o arquivo.
     Resposta *arquivo, *res = malloc (sizeof(Resposta));
     // Definindo estruturas da mensagem.
-    char *found = "HTTP/1.0 200 OK\n";
     char *not_found = "HTTP/1.0 404 Not Found";
     char *payload = "HTTP/1.0 413 Payload Too Large";
-    char content[16];
-    memcpy (content, "Content-Lenght: ", strlen ("Content-Lenght: "));
     char url[URL_SIZE] = {0};
     char header[100] = {0};
     int i, j = 0;
-    int header_size, found_size = strlen (found) + 1;
+    int header_size;
     // Copiando url do cabeçalho.
     for (i = 0; req->cabecalho[i] != ' '; i++);
     i++;
@@ -62,7 +94,7 @@ Resposta *parser_http_header (Requisicao *req){
     }
     /* Tentando abrir o arquivo. */
     // Se o arquivo solicitado for o index.
-    if (url[0] == '/' && url[1] == 0 || url[0] == 0){
+    if ((url[0] == '/' && url[1] == 0) || url[0] == 0){
         arquivo = carregar_arquivo ("www/index.html");
     }else{
         printf ("URL: %s.\n", url);
@@ -76,12 +108,12 @@ Resposta *parser_http_header (Requisicao *req){
         
     }// Se foi possível carregar o arquivo.
     else {
-        sprintf (header, "%s%s%d\r\n\r\n", found, content, arquivo->tamanho_mensagem);
-        printf ("Cabeçalho Resposta:\n%s", header);
-        header_size =  found_size + strlen (header + found_size);
-        res->buffer_resposta = malloc (sizeof(arquivo->tamanho_mensagem + header_size));        
+        sprintf (header, "HTTP/1.0 200 OK\nContent-Lenght: %d\r\n\r\n", arquivo->tamanho_mensagem);
+        header_size = strlen (header);
+        res->buffer_resposta = malloc (arquivo->tamanho_mensagem + header_size);
         memcpy (res->buffer_resposta, header, header_size);
         memcpy (res->buffer_resposta + header_size, arquivo->buffer_resposta, arquivo->tamanho_mensagem);
+        printf ("Pacote: \n%s.\n", res->buffer_resposta);
         res->tamanho_mensagem = header_size + arquivo->tamanho_mensagem;
     }
     free (arquivo);
@@ -101,41 +133,6 @@ void responde_cliente (int socket_cliente){
     free (req);
     free (res->buffer_resposta);
     free (res);
-}
-
-int criar_socket_escuta (int qtde_con){
-    
-    int socket_escuta, yes = 1;
-    struct sockaddr_in servidor;
-
-    // Abrindo socket para ouvir solicitações de conexão.
-    socket_escuta = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket_escuta == -1){
-        perror("erro");
-        exit (1);
-    }
-    // Verificando se o socket ja esta em uso.
-    if (setsockopt (socket_escuta, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1){
-        perror ("setsocket");
-        exit (1);
-    }
-    // Configurando estrutura do servidor.
-    servidor.sin_family = AF_INET; // Atribuindo a familia de protocolos para Internet.
-    servidor.sin_addr.s_addr = htonl(INADDR_ANY); // Recebendo conexões de qualquer endereço.
-    servidor.sin_port = htons(PORT); // Setando e porta em que rodara o processo.
-    memset(servidor.sin_zero, 0, sizeof servidor.sin_zero);
-    // Criando link entre a estrutura servidor ao ID do socket.
-    if(bind(socket_escuta, (struct sockaddr *) &servidor, sizeof(servidor)) < 0){        
-        close(socket_escuta);
-        perror("bind");
-        exit(1);
-    }
-    // Limitando o número de conexões a uma conexão por vez.
-    if (listen(socket_escuta, qtde_con) < 0){
-        perror ("listen");
-        exit(1);
-    }
-    return socket_escuta;
 }
 
 void servidor_sequencial (){
