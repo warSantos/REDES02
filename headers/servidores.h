@@ -15,17 +15,16 @@
 #include <dirent.h>
 
 #define PORT 40000
-#define QTDE_CONEXOES 5
-#define BUFFER_SIZE 256
+#define QTDE_CONEXOES 16
+#define BUFFER_SIZE 64
 #define HEADER_SIZE 2048
 #define URL_SIZE 256
-#define ELDER 404
 
 // ESTRUTURAS PTHREAD
 pthread_t threads[QTDE_CONEXOES];
-u_int32_t threads_rodando;
-pthread_mutex_t threads_rodando_protect;
-pthread_mutex_t fila_requisicoes_protect[QTDE_CONEXOES];
+u_int32_t qtde_requisicoes;
+pthread_mutex_t qtde_requisicoes_protect;
+pthread_mutex_t fila_requisicoes_protect[BUFFER_SIZE];
 
 // Modelo cliente servidor.
 u_int32_t fila_requisicoes[BUFFER_SIZE];

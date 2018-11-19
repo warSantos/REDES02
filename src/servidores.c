@@ -169,8 +169,14 @@ void responde_cliente (int socket_cliente){
 
 void responde_cliente_thread (void *args){
 
+    pthread_mutex_lock (&qtde_requisicoes_protect);
+    qtde_requisicoes++;
+    pthread_mutex_unlock (&qtde_requisicoes_protect);
     int socket_cliente = *(int *)args;
     responde_cliente (socket_cliente);
+    pthread_mutex_lock (&qtde_requisicoes_protect);
+    qtde_requisicoes--;
+    pthread_mutex_unlock (&qtde_requisicoes_protect);
     free (args);
 }
 
@@ -185,37 +191,37 @@ void servidor_sequencial (void){
         socket_cliente = accept(socket_escuta, (struct sockaddr *) &cliente, (socklen_t *) &sizeSockaddr);
         // Respondendo cliente.
         responde_cliente (socket_cliente);
-    }
+    }    
     // Encerrando socket de escuta do cliente.
     close (socket_escuta);
 }
 
 void servidor_paralelo (void){
     
-    pthread_mutex_init (&threads_rodando_protect, NULL);
-
+    pthread_mutex_init (&qtde_requisicoes_protect, NULL);
     int socket_escuta, *socket_cliente;
     int sizeSockaddr = sizeof(struct sockaddr_in);
     struct sockaddr_in cliente;
     socket_escuta = criar_socket_escuta (QTDE_CONEXOES);
     // Estruturas de thread.
-    threads_rodando = 0;
+    qtde_requisicoes = 0;
     // Mantenha o servidor ativo.
     while (1){
         // Iniciando conexão com o cliente.
         socket_cliente = malloc (sizeof(int));
         socket_cliente[0] = accept(socket_escuta, (struct sockaddr *) &cliente, (socklen_t *) &sizeSockaddr);
-        if (pthread_create (&threads[threads_rodando],
-            NULL, (void *)&responde_cliente_thread, (void *)&socket_cliente[0]) < 0){
+        pthread_t t_local;
+        if (pthread_create (&t_local, NULL, (void *)&responde_cliente_thread, (void *)&socket_cliente[0]) < 0){
                 perror("create thread error");
             exit(1);
-        }
-        if (threads_rodando == QTDE_CONEXOES){
-            sleep (0.2);
+        }// Se o sistema sobrecarregar, espere as threads terminar.
+        if (qtde_requisicoes == QTDE_CONEXOES){
+            sleep (0.3);
         }
     }
     // Encerrando socket de escuta do servidor.
     close (socket_escuta);
+    pthread_mutex_destroy (&qtde_requisicoes_protect);
 }
 
 void servidor_produtor_consumidor (void){
@@ -227,42 +233,45 @@ void servidor_produtor_consumidor (void){
     
     // Iniciando a fila de clientes.
     int i;
-    for (i = 0; i < QTDE_CONEXOES; i++) fila_requisicoes[i] = -1;
+    for (i = 0; i < BUFFER_SIZE; i++) fila_requisicoes[i] = -1;
 
     // Estruturas de threads.
-    pthread_mutex_init (&threads_rodando_protect, NULL);
-    threads_rodando = 0;
+    pthread_mutex_init (&qtde_requisicoes_protect, NULL);
+    qtde_requisicoes = 0;
     // Cria threads (Consumidores).
     for (i = 0; i < QTDE_CONEXOES; i++){
         pthread_mutex_init (&fila_requisicoes_protect[i], NULL);
-        if (pthread_create (&threads[threads_rodando],
+        if (pthread_create (&threads[i],
             NULL, (void *)&consumidor, NULL) < 0){
                 perror("create thread error");
             exit(1);
-        }        
+        }
     }
     // Mantenha o servidor ativo.
     while (1){
         // Iniciando conexão com o cliente.
         socket_cliente = accept(socket_escuta, (struct sockaddr *) &cliente, (socklen_t *) &sizeSockaddr);
-        if (threads_rodando == QTDE_CONEXOES){ // Se não houver espaço no buffer.
-            sleep (0.1);
-        }else{ // Se houver espaço no buffer.
-            for (i = 0; i < QTDE_CONEXOES; ++i){
-                // Se esta posição no buffer ja estiver sido atendida.
-                if (fila_requisicoes[i] == -1){
-                    // Se esta posição não estiver fechada.
-                    if (!pthread_mutex_trylock(&fila_requisicoes_protect[i])){
-                        fila_requisicoes[i] = socket_cliente;
-                        pthread_mutex_unlock(&fila_requisicoes_protect[i]);
-                        break;
-                    }
+        for (i = 0; i < BUFFER_SIZE; ++i){
+            // Se esta posição no buffer ja estiver sido atendida.
+            if (fila_requisicoes[i] == -1){
+                // Se esta posição não estiver fechada.
+                if (!pthread_mutex_trylock(&fila_requisicoes_protect[i])){
+                    fila_requisicoes[i] = socket_cliente;
+                    pthread_mutex_unlock(&fila_requisicoes_protect[i]);
+                    break;
+                }
+            }else if (fila_requisicoes[BUFFER_SIZE - i - 1] == -1){
+                // Se esta posição não estiver fechada.
+                if (!pthread_mutex_trylock(&fila_requisicoes_protect[BUFFER_SIZE - i - 1])){
+                    fila_requisicoes[BUFFER_SIZE - i - 1] = socket_cliente;
+                    pthread_mutex_unlock(&fila_requisicoes_protect[BUFFER_SIZE - i - 1]);
+                    break;
                 }
             }
         }
     }
     // Liberando estruturas.
-    pthread_mutex_destroy (&threads_rodando_protect);
+    pthread_mutex_destroy (&qtde_requisicoes_protect);
     for (i = 0; i < QTDE_CONEXOES; ++i){
         pthread_mutex_destroy (&fila_requisicoes_protect[i]);
     }
@@ -283,6 +292,13 @@ void consumidor (void){
                     fila_requisicoes[i] = -1;
                 }
                 pthread_mutex_unlock (&fila_requisicoes_protect[i]);
+            }else if (!pthread_mutex_trylock (&fila_requisicoes_protect[BUFFER_SIZE - i - 1])){
+                if (fila_requisicoes[BUFFER_SIZE - i - 1] != -1){
+                    responde_cliente (fila_requisicoes[BUFFER_SIZE - i - 1]);
+                    // Marque a requisição como atendida.
+                    fila_requisicoes[BUFFER_SIZE - i - 1] = -1;
+                }
+                pthread_mutex_unlock (&fila_requisicoes_protect[BUFFER_SIZE - i - 1]);
             }
         }// Se não conseguiu nenhuma requisição para antender durma por 0.2 ms.
         sleep (0.1);
