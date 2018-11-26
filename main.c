@@ -29,7 +29,7 @@ int main (int argc, char **argv){
 			// Usuário escolheu a opção -z, pegar o argumento
 			case 'h':
                 ajuda ();
-				break;
+				exit(0);
             default:
                 ajuda ();
 				break;

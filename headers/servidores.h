@@ -15,8 +15,8 @@
 #include <dirent.h>
 
 #define PORT 40000
-#define QTDE_CONEXOES 16
-#define BUFFER_SIZE 64
+#define QTDE_CONEXOES 32
+#define BUFFER_SIZE 128
 #define HEADER_SIZE 2048
 #define URL_SIZE 256
 
